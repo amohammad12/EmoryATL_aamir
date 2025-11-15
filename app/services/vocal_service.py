@@ -1,5 +1,5 @@
 """
-Vocal generation service using Bark TTS (Expressive Singing AI)
+Hybrid vocal generation service using ElevenLabs (primary) + Bark (fallback)
 """
 import asyncio
 import uuid
@@ -8,12 +8,29 @@ import numpy as np
 import scipy.io.wavfile as wavfile
 from pathlib import Path
 from pydub import AudioSegment
-from transformers import AutoProcessor, BarkModel
-import torch
 from typing import Optional
+import io
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Try to import ElevenLabs
+try:
+    from elevenlabs import generate, Voice, VoiceSettings, set_api_key
+    ELEVENLABS_AVAILABLE = True
+except ImportError:
+    ELEVENLABS_AVAILABLE = False
+    logger.warning("ElevenLabs not available - will use Bark only")
+
+# Try to import Bark
+try:
+    from transformers import AutoProcessor, BarkModel
+    import torch
+    BARK_AVAILABLE = True
+except ImportError:
+    BARK_AVAILABLE = False
+    logger.warning("Bark not available")
 
 
 class BarkModelCache:
@@ -30,6 +47,9 @@ class BarkModelCache:
 
     def get_model_and_processor(self):
         """Load and cache Bark model and processor"""
+        if not BARK_AVAILABLE:
+            raise ImportError("Bark dependencies not installed")
+
         if self._model is None or self._processor is None:
             logger.info(f"Loading Bark model: {settings.BARK_MODEL}")
 
@@ -58,19 +78,43 @@ class BarkModelCache:
 
 
 class VocalGenerator:
-    """Generate expressive singing vocals using Bark TTS"""
+    """
+    Hybrid TTS generator using ElevenLabs as primary and Bark as fallback
+    """
 
     def __init__(self):
-        """Initialize Bark TTS with cached model"""
-        self.voice_preset = settings.BARK_VOICE_PRESET
-        self.singing_mode = settings.BARK_SINGING_MODE
-        self.sample_rate = settings.SAMPLE_RATE
+        """Initialize TTS providers"""
+        self.provider = settings.TTS_PROVIDER
+        self.fallback_enabled = settings.TTS_FALLBACK_TO_BARK
 
-        # Get cached model, processor, and device
-        cache = BarkModelCache()
-        self.model, self.processor, self.device = cache.get_model_and_processor()
+        # Initialize ElevenLabs if available and configured
+        self.elevenlabs_available = False
+        if ELEVENLABS_AVAILABLE and settings.ELEVENLABS_API_KEY:
+            try:
+                set_api_key(settings.ELEVENLABS_API_KEY)
+                self.elevenlabs_available = True
+                logger.info("ElevenLabs TTS initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize ElevenLabs: {e}")
+                if not self.fallback_enabled:
+                    raise
 
-        logger.info(f"VocalGenerator initialized with voice: {self.voice_preset} on device: {self.device}")
+        # Initialize Bark if needed
+        self.bark_model = None
+        self.bark_processor = None
+        self.bark_device = None
+
+        if BARK_AVAILABLE and (self.provider == "bark" or self.fallback_enabled or not self.elevenlabs_available):
+            try:
+                cache = BarkModelCache()
+                self.bark_model, self.bark_processor, self.bark_device = cache.get_model_and_processor()
+                logger.info("Bark TTS initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Bark: {e}")
+                if not self.elevenlabs_available:
+                    raise
+
+        logger.info(f"VocalGenerator initialized: Primary={self.provider}, Fallback={self.fallback_enabled}")
 
     async def generate_vocals_async(
         self,
@@ -78,7 +122,7 @@ class VocalGenerator:
         output_path: str = None
     ) -> str:
         """
-        Generate vocals using Bark TTS (async wrapper)
+        Generate vocals using TTS (async wrapper)
 
         Args:
             lyrics: The lyrics text
@@ -89,11 +133,11 @@ class VocalGenerator:
         """
         # Run in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._generate_vocals_sync, lyrics, output_path)
+        return await loop.run_in_executor(None, self.generate_vocals, lyrics, output_path)
 
     def generate_vocals(self, lyrics: str, output_path: str = None) -> str:
         """
-        Synchronous vocal generation
+        Synchronous vocal generation with automatic fallback
 
         Args:
             lyrics: The lyrics text
@@ -102,169 +146,181 @@ class VocalGenerator:
         Returns:
             Path to generated audio file (MP3)
         """
-        return self._generate_vocals_sync(lyrics, output_path)
+        # Generate unique filename if not provided
+        if output_path is None:
+            filename = f"vocals_{uuid.uuid4()}.mp3"
+            output_path = str(settings.TEMP_DIR / filename)
 
-    def _generate_vocals_sync(self, lyrics: str, output_path: Optional[str] = None) -> str:
-        """
-        Internal synchronous generation method
+        # Ensure output is MP3
+        if not output_path.endswith('.mp3'):
+            output_path = output_path.replace('.wav', '.mp3')
 
-        Args:
-            lyrics: The lyrics text
-            output_path: Optional output path
+        # Clean lyrics
+        cleaned_lyrics = self._clean_lyrics(lyrics)
 
-        Returns:
-            Path to generated MP3 file
-        """
+        # Try primary provider
         try:
-            # Generate unique filename if not provided
-            if output_path is None:
-                filename = f"vocals_{uuid.uuid4()}.mp3"
-                output_path = str(settings.TEMP_DIR / filename)
+            if self.provider == "elevenlabs" and self.elevenlabs_available:
+                logger.info("Generating vocals with ElevenLabs...")
+                return self._generate_with_elevenlabs(cleaned_lyrics, output_path)
+            elif self.provider == "bark" and self.bark_model:
+                logger.info("Generating vocals with Bark...")
+                return self._generate_with_bark(cleaned_lyrics, output_path)
+            else:
+                raise ValueError(f"Provider '{self.provider}' not available")
 
-            # Ensure output is MP3
-            if not output_path.endswith('.mp3'):
-                output_path = output_path.replace('.wav', '.mp3')
+        except Exception as e:
+            logger.error(f"Primary TTS provider failed: {e}")
 
-            logger.info(f"Generating vocals with Bark TTS to {output_path}")
+            # Try fallback
+            if self.fallback_enabled:
+                logger.warning("Falling back to alternative TTS provider...")
+                try:
+                    if self.provider == "elevenlabs" and self.bark_model:
+                        logger.info("Falling back to Bark...")
+                        return self._generate_with_bark(cleaned_lyrics, output_path)
+                    elif self.provider == "bark" and self.elevenlabs_available:
+                        logger.info("Falling back to ElevenLabs...")
+                        return self._generate_with_elevenlabs(cleaned_lyrics, output_path)
+                except Exception as fallback_error:
+                    logger.error(f"Fallback also failed: {fallback_error}")
+                    raise Exception(f"Both TTS providers failed. Primary: {e}, Fallback: {fallback_error}")
+            else:
+                raise
 
-            # Format lyrics for singing mode
-            formatted_lyrics = self._format_for_singing(lyrics)
-
-            logger.debug(f"Formatted lyrics: {formatted_lyrics[:200]}...")
-
-            # Prepare inputs
-            inputs = self.processor(
-                formatted_lyrics,
-                voice_preset=self.voice_preset,
-                return_tensors="pt"
+    def _generate_with_elevenlabs(self, lyrics: str, output_path: str) -> str:
+        """Generate vocals using ElevenLabs API"""
+        try:
+            # Generate audio using the standalone generate function
+            audio_generator = generate(
+                text=lyrics,
+                voice=Voice(
+                    voice_id=settings.ELEVENLABS_VOICE_ID,
+                    settings=VoiceSettings(
+                        stability=settings.ELEVENLABS_STABILITY,
+                        similarity_boost=settings.ELEVENLABS_SIMILARITY,
+                        style=settings.ELEVENLABS_STYLE,
+                        use_speaker_boost=settings.ELEVENLABS_BOOST
+                    )
+                ),
+                model=settings.ELEVENLABS_MODEL
             )
 
-            # Move inputs to same device as model
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            # Collect audio bytes
+            audio_bytes = b''
+            for chunk in audio_generator:
+                audio_bytes += chunk
 
-            # Generate audio with optimized parameters
-            with torch.no_grad():
-                audio_array = self.model.generate(
-                    **inputs,
-                    semantic_temperature=settings.BARK_SEMANTIC_TEMP,
-                    coarse_temperature=settings.BARK_COARSE_TEMP,
-                    fine_temperature=settings.BARK_FINE_TEMP,
-                    do_sample=True
-                )
+            # Convert to AudioSegment
+            audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
 
-            # Convert to numpy array
-            audio_array = audio_array.cpu().numpy().squeeze()
-
-            # Get sample rate from model config
-            sample_rate = self.model.generation_config.sample_rate
-
-            # Save as WAV first (temporary)
-            temp_wav = output_path.replace('.mp3', '_temp.wav')
-
-            # Ensure audio is in correct format for WAV
-            if audio_array.dtype != np.int16:
-                # Normalize to [-1, 1] then convert to int16
-                audio_array = np.clip(audio_array, -1.0, 1.0)
-                audio_array = (audio_array * 32767).astype(np.int16)
-
-            wavfile.write(temp_wav, rate=sample_rate, data=audio_array)
-
-            # Convert WAV to MP3 using pydub
-            audio_segment = AudioSegment.from_wav(temp_wav)
-
-            # Resample to target sample rate if needed
-            if sample_rate != settings.SAMPLE_RATE:
-                audio_segment = audio_segment.set_frame_rate(settings.SAMPLE_RATE)
+            # Apply post-processing
+            audio = self._enhance_audio(audio)
 
             # Export as MP3
-            audio_segment.export(output_path, format="mp3", bitrate="192k")
+            audio.export(output_path, format="mp3", bitrate="192k")
 
-            # Clean up temporary WAV file
-            Path(temp_wav).unlink(missing_ok=True)
-
-            logger.info(f"Vocals generated successfully: {output_path}")
-
+            logger.info(f"ElevenLabs vocals generated successfully: {output_path}")
             return output_path
 
         except Exception as e:
-            logger.error(f"Error generating vocals with Bark: {e}", exc_info=True)
+            logger.error(f"ElevenLabs generation failed: {e}")
             raise
 
-    def _format_for_singing(self, lyrics: str) -> str:
-        """
-        Format lyrics for Bark's singing mode
-        Adds musical notations and structures lyrics for singing
+    def _generate_with_bark(self, lyrics: str, output_path: str) -> str:
+        """Generate vocals using Bark (with chunking optimization)"""
+        try:
+            # Format lyrics for teacher-style reading
+            formatted_lyrics = self._format_for_bark(lyrics)
 
-        Args:
-            lyrics: Raw lyrics text
+            # Split into chunks for better quality
+            chunks = self._split_into_chunks(formatted_lyrics, max_length=200)
 
-        Returns:
-            Formatted lyrics ready for Bark singing
-        """
+            logger.info(f"Split lyrics into {len(chunks)} chunks for Bark")
+
+            # Generate audio for each chunk
+            audio_segments = []
+            sample_rate = self.bark_model.generation_config.sample_rate
+
+            for i, chunk in enumerate(chunks):
+                logger.debug(f"Generating chunk {i+1}/{len(chunks)}")
+
+                # Prepare inputs
+                inputs = self.bark_processor(
+                    chunk,
+                    voice_preset=settings.BARK_VOICE_PRESET,
+                    return_tensors="pt"
+                )
+
+                # Move inputs to same device as model
+                inputs = {k: v.to(self.bark_device) for k, v in inputs.items()}
+
+                # Generate audio
+                with torch.no_grad():
+                    audio_array = self.bark_model.generate(
+                        **inputs,
+                        semantic_temperature=settings.BARK_SEMANTIC_TEMP,
+                        coarse_temperature=settings.BARK_COARSE_TEMP,
+                        fine_temperature=settings.BARK_FINE_TEMP,
+                        do_sample=True
+                    )
+
+                # Convert to numpy array
+                audio_array = audio_array.cpu().numpy().squeeze()
+
+                # Convert to AudioSegment
+                if audio_array.dtype != np.int16:
+                    audio_array = np.clip(audio_array, -1.0, 1.0)
+                    audio_array = (audio_array * 32767).astype(np.int16)
+
+                # Create temporary file
+                temp_chunk_wav = str(settings.TEMP_DIR / f"chunk_{i}_{uuid.uuid4()}.wav")
+                wavfile.write(temp_chunk_wav, rate=sample_rate, data=audio_array)
+
+                # Load as AudioSegment
+                chunk_audio = AudioSegment.from_wav(temp_chunk_wav)
+
+                # Add pause between chunks
+                if i < len(chunks) - 1:
+                    silence = AudioSegment.silent(duration=300)
+                    chunk_audio = chunk_audio + silence
+
+                audio_segments.append(chunk_audio)
+
+                # Cleanup
+                Path(temp_chunk_wav).unlink(missing_ok=True)
+
+            # Concatenate all chunks
+            final_audio = sum(audio_segments)
+
+            # Apply post-processing
+            final_audio = self._enhance_audio(final_audio)
+
+            # Resample if needed
+            if sample_rate != settings.SAMPLE_RATE:
+                final_audio = final_audio.set_frame_rate(settings.SAMPLE_RATE)
+
+            # Export as MP3
+            final_audio.export(output_path, format="mp3", bitrate="192k")
+
+            logger.info(f"Bark vocals generated successfully: {output_path}")
+            return output_path
+
+        except Exception as e:
+            logger.error(f"Bark generation failed: {e}")
+            raise
+
+    def _clean_lyrics(self, lyrics: str) -> str:
+        """Clean lyrics for TTS"""
         import re
 
-        # First, clean the lyrics (remove structure labels)
-        cleaned = self._add_shanty_rhythm(lyrics)
-
-        if not self.singing_mode:
-            # If not singing mode, return cleaned lyrics as-is
-            return cleaned
-
-        # Add singing indicators for Bark
-        # Bark understands musical notations in the text
-        lines = cleaned.split('\n')
-        formatted_lines = []
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                formatted_lines.append('')
-                continue
-
-            # Add musical notation for shanty lines
-            # The ♪ symbol helps Bark understand it should be sung
-            if any(word in line.lower() for word in ['arr', 'yo-ho', 'ahoy', 'avast', 'heave']):
-                # Pirate exclamations - make them energetic
-                formatted_line = f"♪ {line} ♪"
-            elif line.endswith('!'):
-                # Exclamatory lines - sung with emphasis
-                formatted_line = f"♪ {line}"
-            else:
-                # Regular verse lines - smooth singing
-                formatted_line = f"♪ {line}"
-
-            formatted_lines.append(formatted_line)
-
-        # Join with proper spacing
-        formatted = '\n'.join(formatted_lines)
-
-        # Add singing context at the beginning (helps Bark understand style)
-        formatted = f"[singing a pirate sea shanty]\n{formatted}"
-
-        logger.debug(f"Formatted for singing:\n{formatted}")
-
-        return formatted
-
-    def _add_shanty_rhythm(self, lyrics: str) -> str:
-        """
-        Clean and format lyrics for TTS
-        Removes structure labels and formats pirate vocalizations
-
-        Args:
-            lyrics: Raw lyrics text
-
-        Returns:
-            Cleaned lyrics ready for TTS
-        """
-        import re
-
-        # Remove structure labels (Verse 1:, Chorus:, etc.)
+        # Remove structure labels
         cleaned = re.sub(r'Verse \d+:\s*', '', lyrics)
         cleaned = re.sub(r'Chorus:\s*', '', cleaned)
         cleaned = re.sub(r'Bridge:\s*', '', cleaned)
         cleaned = re.sub(r'Outro:\s*', '', cleaned)
 
-        # Remove parentheses from pirate vocalizations but keep the words
+        # Remove parentheses from pirate vocalizations
         pirate_words = ['arr', 'Arr', 'yo-ho', 'Yo-ho', 'ahoy', 'Ahoy',
                        'avast', 'Avast', 'heave', 'Heave', 'shiver']
 
@@ -275,6 +331,64 @@ class VocalGenerator:
         # Clean up excessive blank lines
         cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
 
-        logger.debug(f"Cleaned lyrics for TTS:\n{cleaned}")
-
         return cleaned.strip()
+
+    def _format_for_bark(self, lyrics: str) -> str:
+        """Format lyrics for Bark with simple teacher prompt"""
+        return f"[Teacher reading a fun pirate story to children]\n{lyrics}"
+
+    def _split_into_chunks(self, text: str, max_length: int = 200) -> list:
+        """Split text into smaller chunks for Bark"""
+        # Remove context prompt for chunking
+        if text.startswith('['):
+            context_end = text.find(']')
+            context = text[:context_end+1]
+            text_body = text[context_end+1:].strip()
+        else:
+            context = ""
+            text_body = text
+
+        # Split by lines
+        lines = [line.strip() for line in text_body.split('\n') if line.strip()]
+
+        chunks = []
+        current_chunk = ""
+
+        for line in lines:
+            if len(current_chunk) + len(line) + 2 > max_length and current_chunk:
+                chunk_with_context = f"{context}\n{current_chunk}".strip() if context else current_chunk
+                chunks.append(chunk_with_context)
+                current_chunk = line
+            else:
+                if current_chunk:
+                    current_chunk += "\n" + line
+                else:
+                    current_chunk = line
+
+        # Add the last chunk
+        if current_chunk:
+            chunk_with_context = f"{context}\n{current_chunk}".strip() if context else current_chunk
+            chunks.append(chunk_with_context)
+
+        return chunks
+
+    def _enhance_audio(self, audio: AudioSegment) -> AudioSegment:
+        """Apply audio enhancements"""
+        # Normalize
+        audio = audio.normalize()
+
+        # Gentle compression
+        audio = audio.compress_dynamic_range(
+            threshold=-20.0,
+            ratio=4.0,
+            attack=5.0,
+            release=50.0
+        )
+
+        # Boost volume
+        audio = audio + 2
+
+        # High-pass filter
+        audio = audio.high_pass_filter(80)
+
+        return audio

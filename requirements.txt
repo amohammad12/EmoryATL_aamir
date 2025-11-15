@@ -18,7 +18,11 @@ nltk==3.8.1
 # ===== LLM (Gemini) =====
 google-generativeai==0.3.1
 
-# ===== TTS (Bark - Expressive Singing TTS) =====
+# ===== TTS (ElevenLabs Primary + Bark Fallback) =====
+# ElevenLabs - Professional TTS (Primary)
+elevenlabs>=1.0.0
+
+# Bark - Expressive TTS (Fallback)
 transformers>=4.31.0
 accelerate>=0.20.0
 torch>=2.0.0
