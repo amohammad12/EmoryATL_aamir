@@ -10,7 +10,9 @@ from app.services import (
     LyricsGenerator,
     VocalGenerator,
     AudioService,
-    KaraokeGenerator
+    KaraokeGenerator,
+    PirateBeatGenerator,
+    MoodAnalyzer
 )
 
 logger = logging.getLogger(__name__)
@@ -74,32 +76,54 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
 
         logger.info(f"Vocals generated: {vocal_path}")
 
-        # Update progress: 60%
-        self.update_state(state='PROGRESS', meta={'progress': 60, 'status': 'Finding instrumental...'})
+        # Update progress: 55%
+        self.update_state(state='PROGRESS', meta={'progress': 55, 'status': 'Analyzing mood and BPM...'})
 
-        # Step 4: Get matching instrumental
+        # Step 4: Analyze mood and detect BPM
         audio_service = AudioService()
+        vocal_bpm = audio_service.detect_bpm(vocal_path)
+
+        mood_analyzer = MoodAnalyzer()
+        mood_analysis = mood_analyzer.analyze_lyrics(lyrics_data['lyrics'])
+        energy = mood_analyzer.adjust_energy_for_bpm(mood_analysis['energy'], vocal_bpm)
+
+        logger.info(f"Mood: {mood_analysis['mood'].value}, Energy: {energy:.2f}, BPM: {vocal_bpm:.1f}")
+
+        # Update progress: 60%
+        self.update_state(state='PROGRESS', meta={'progress': 60, 'status': 'Generating themed instrumental...'})
+
+        # Step 5: Generate themed instrumental
+        # First check if we have a pre-made beat in library
         instrumental_path = audio_service.get_instrumental(vocal_path, genre="pirate-shanty")
 
         if not instrumental_path:
-            logger.warning("No instrumental found, using vocals only")
-            # If no instrumental, just use vocals
-            final_audio_path = vocal_path
+            # No pre-made beat found, generate one dynamically!
+            logger.info(f"No pre-made beat found, generating themed instrumental for '{word}'...")
+
+            beat_gen = PirateBeatGenerator()
+            instrumental_path = beat_gen.generate_beat(
+                word=word,
+                duration=lyrics_data['estimated_duration'] + 2,  # Add 2s buffer
+                bpm=vocal_bpm,
+                energy=energy
+            )
+
+            logger.info(f"Generated themed instrumental: {instrumental_path}")
         else:
-            logger.info(f"Instrumental selected: {instrumental_path}")
+            logger.info(f"Using pre-made instrumental: {instrumental_path}")
 
-            # Update progress: 75%
-            self.update_state(state='PROGRESS', meta={'progress': 75, 'status': 'Mixing audio...'})
+        # Update progress: 75%
+        self.update_state(state='PROGRESS', meta={'progress': 75, 'status': 'Mixing vocals with instrumental...'})
 
-            # Step 5: Mix vocals and instrumental
-            final_audio_path = audio_service.mix_audio(vocal_path, instrumental_path)
+        # Step 6: Mix vocals and instrumental
+        final_audio_path = audio_service.mix_audio(vocal_path, instrumental_path)
 
-            logger.info(f"Mixed audio: {final_audio_path}")
+        logger.info(f"Mixed audio: {final_audio_path}")
 
         # Update progress: 85%
         self.update_state(state='PROGRESS', meta={'progress': 85, 'status': 'Creating karaoke timings...'})
 
-        # Step 6: Generate karaoke timings
+        # Step 7: Generate karaoke timings
         karaoke_gen = KaraokeGenerator()
         timings = karaoke_gen.generate_word_timings(final_audio_path, lyrics_data['lyrics'])
 
@@ -108,7 +132,7 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
         # Update progress: 95%
         self.update_state(state='PROGRESS', meta={'progress': 95, 'status': 'Finalizing...'})
 
-        # Step 7: Get final metadata
+        # Step 8: Get final metadata
         duration = audio_service.get_audio_duration(final_audio_path)
         bpm = audio_service.detect_bpm(final_audio_path)
 

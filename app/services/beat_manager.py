@@ -93,7 +93,8 @@ class BeatLibraryManager:
                     }
 
                     self.catalog[genre].append(beat_info)
-                    logger.info(f"Added {beat_file.name}: {tempo:.1f} BPM, {len(y)/sr:.1f}s")
+                    duration_sec = float(len(y) / sr)
+                    logger.info(f"Added {beat_file.name}: {tempo:.1f} BPM, {duration_sec:.1f}s")
 
                 except Exception as e:
                     logger.error(f"Error processing {beat_file}: {e}")
