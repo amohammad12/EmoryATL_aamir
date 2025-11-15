@@ -80,50 +80,34 @@ class VocalGenerator:
 
     def _add_shanty_rhythm(self, lyrics: str) -> str:
         """
-        Add SSML markers for sea shanty rhythm
-        Makes it sound more musical and fun for kids
+        Clean and format lyrics for TTS
+        Removes structure labels and formats pirate vocalizations
 
         Args:
             lyrics: Raw lyrics text
 
         Returns:
-            SSML-formatted lyrics with pauses and emphasis
+            Cleaned lyrics ready for TTS
         """
-        # Split into lines
-        lines = lyrics.split('\n')
-        formatted_lines = []
+        import re
 
-        for line in lines:
-            # Skip empty lines
-            if not line.strip():
-                formatted_lines.append(line)
-                continue
+        # Remove structure labels (Verse 1:, Chorus:, etc.)
+        cleaned = re.sub(r'Verse \d+:\s*', '', lyrics)
+        cleaned = re.sub(r'Chorus:\s*', '', cleaned)
 
-            # Add pauses after pirate vocalizations
-            line = line.replace('(arr!)', '<break time="300ms"/>arr!<break time="300ms"/>')
-            line = line.replace('(Arr!)', '<break time="300ms"/>Arr!<break time="300ms"/>')
-            line = line.replace('(yo-ho!)', '<break time="300ms"/>yo-ho!<break time="300ms"/>')
-            line = line.replace('(Yo-ho!)', '<break time="300ms"/>Yo-ho!<break time="300ms"/>')
-            line = line.replace('(ahoy!)', '<break time="300ms"/>ahoy!<break time="300ms"/>')
-            line = line.replace('(Ahoy!)', '<break time="300ms"/>Ahoy!<break time="300ms"/>')
-            line = line.replace('(avast!)', '<break time="300ms"/>avast!<break time="300ms"/>')
-            line = line.replace('(Avast!)', '<break time="300ms"/>Avast!<break time="300ms"/>')
+        # Remove parentheses from pirate vocalizations but keep the words
+        cleaned = cleaned.replace('(arr!)', 'arr!')
+        cleaned = cleaned.replace('(Arr!)', 'Arr!')
+        cleaned = cleaned.replace('(yo-ho!)', 'yo-ho!')
+        cleaned = cleaned.replace('(Yo-ho!)', 'Yo-ho!')
+        cleaned = cleaned.replace('(ahoy!)', 'ahoy!')
+        cleaned = cleaned.replace('(Ahoy!)', 'Ahoy!')
+        cleaned = cleaned.replace('(avast!)', 'avast!')
+        cleaned = cleaned.replace('(Avast!)', 'Avast!')
 
-            # Add emphasis and pitch increase for chorus sections
-            if 'Chorus:' in line:
-                line = line.replace('Chorus:', '<prosody pitch="+10%" volume="+20%">Chorus:</prosody>')
-            elif 'Verse' in line:
-                line = line.replace('Verse 1:', 'Verse 1:')
-                line = line.replace('Verse 2:', 'Verse 2:')
+        # Clean up excessive blank lines
+        cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
 
-            # Add slight pause at end of each line for better rhythm
-            if line.strip() and not line.endswith('</prosody>'):
-                line += '<break time="200ms"/>'
+        logger.debug(f"Cleaned lyrics for TTS:\n{cleaned}")
 
-            formatted_lines.append(line)
-
-        result = '\n'.join(formatted_lines)
-
-        logger.debug(f"Formatted lyrics with SSML:\n{result}")
-
-        return result
+        return cleaned.strip()

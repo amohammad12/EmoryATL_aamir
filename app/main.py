@@ -149,28 +149,20 @@ async def generate_song(request: GenerateRequest):
                 }
             )
 
-        # Create new job
-        job_id = str(uuid.uuid4())
+        # Start Celery task FIRST to get task ID
+        task = generate_song_task.delay(word)
+        job_id = task.id  # Use Celery task ID as job_id
 
-        # Save job to MongoDB
+        # Save job to MongoDB with Celery task ID
         job = Job(
             job_id=job_id,
             word=word,
-            status="pending",
+            status="processing",
             progress=0
         )
         await job.insert()
 
         logger.info(f"Created job {job_id} for word '{word}'")
-
-        # Start Celery task
-        task = generate_song_task.delay(word)
-
-        # Update job status
-        job.status = "processing"
-        await job.save()
-
-        logger.info(f"Started Celery task {task.id} for job {job_id}")
 
         return JobResponse(
             job_id=job_id,

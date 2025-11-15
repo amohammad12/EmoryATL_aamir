@@ -5,9 +5,17 @@ import uuid
 import logging
 from pathlib import Path
 from typing import List, Dict
-from aeneas.executetask import ExecuteTask
-from aeneas.task import Task
 from app.config import settings
+
+# Try to import aeneas, but make it optional
+try:
+    from aeneas.executetask import ExecuteTask
+    from aeneas.task import Task
+    AENEAS_AVAILABLE = True
+except ImportError:
+    AENEAS_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Aeneas not available - using fallback timing generation")
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +47,11 @@ class KaraokeGenerator:
                 ...
             ]
         """
+        # Use fallback if aeneas is not available
+        if not AENEAS_AVAILABLE:
+            logger.info("Aeneas not installed, using fallback timing")
+            return self._generate_fallback_timings(lyrics)
+
         try:
             logger.info(f"Generating karaoke timings for {audio_path}")
 
