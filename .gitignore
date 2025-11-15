@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment variables
+.env
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project specific
+outputs/*.mp3
+outputs/*.wav
+temp/*
+beats/catalog.json
+*.db
+*.sqlite
+*.sqlite3
+
+# MongoDB
+data/
+*.log
+
+# Redis
+dump.rdb
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Audio files (except example beats)
+*.mp3
+*.wav
+!beats/**/*.wav
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
