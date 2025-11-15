@@ -18,19 +18,23 @@ nltk==3.8.1
 # ===== LLM (Gemini) =====
 google-generativeai==0.3.1
 
-# ===== TTS (RECOMMENDED: Edge TTS - 100% FREE!) =====
-edge-tts==6.1.9
+# ===== TTS (Bark - Expressive Singing TTS) =====
+transformers>=4.31.0
+accelerate>=0.20.0
+torch>=2.0.0
+optimum>=1.12.0
 
 # ===== AUDIO PROCESSING =====
 librosa==0.10.1
 soundfile==0.12.1
 pydub==0.25.1
-numpy==1.26.2
-scipy==1.11.4
-pyrubberband==0.3.0
+numpy>=1.26.2
+scipy>=1.11.4
 
 # ===== KARAOKE ALIGNMENT (CRITICAL) =====
-aeneas==1.7.3
+# Note: aeneas may have Python 3.12 compatibility issues
+# If installation fails, consider using Python 3.10 or 3.11
+# aeneas==1.7.3
 
 # ===== ASYNC TASKS (REQUIRED) =====
 celery==5.3.4

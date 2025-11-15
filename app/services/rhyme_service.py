@@ -48,14 +48,14 @@ def get_kid_friendly_rhymes(word: str, count: int = 6) -> List[str]:
         # Filter for kid-friendly words
         kid_friendly = []
         for rhyme in all_rhymes:
-            # Check if in preschool vocabulary
+            # Check if in preschool vocabulary (high priority)
             if rhyme.lower() in PRESCHOOL_VOCAB:
                 kid_friendly.append(rhyme)
-            # Also accept simple words (max 2 syllables)
-            elif len(rhyme) <= 6 and rhyme.isalpha():
-                # Check syllable count
+            # Also accept simple words (max 3 syllables, increased length)
+            elif len(rhyme) <= 10 and rhyme.isalpha():
+                # Check syllable count (relaxed to 3 syllables)
                 phones = pronouncing.phones_for_word(rhyme)
-                if phones and pronouncing.syllable_count(phones[0]) <= 2:
+                if phones and pronouncing.syllable_count(phones[0]) <= 3:
                     kid_friendly.append(rhyme)
 
         # Remove duplicates and the original word

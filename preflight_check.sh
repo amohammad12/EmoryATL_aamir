@@ -89,7 +89,7 @@ fi
 echo ""
 echo "6️⃣ Checking Python packages..."
 source venv/bin/activate 2>/dev/null
-if python -c "import fastapi, beanie, celery, edge_tts, librosa" 2>/dev/null; then
+if python -c "import fastapi, beanie, celery, transformers, librosa" 2>/dev/null; then
     echo "   ✅ Critical Python packages installed"
 else
     echo "   ❌ Some Python packages missing"

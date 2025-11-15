@@ -2,7 +2,7 @@
 
 echo "========================================="
 echo "  Pirate Karaoke Backend Setup Script"
-echo "  (MongoDB + Redis + Edge TTS)"
+echo "  (MongoDB + Redis + Bark TTS)"
 echo "========================================="
 echo ""
 

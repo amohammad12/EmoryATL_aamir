@@ -5,7 +5,7 @@ Generate educational pirate-themed sea shanties with karaoke-style word highligh
 ## 🎯 Features
 
 - **Pirate-Themed Lyrics**: Gemini AI generates kid-safe sea shanties with "Arr!" and "Yo-ho!" vocalizations
-- **Edge TTS (100% FREE)**: Natural-sounding vocals using Microsoft Edge TTS
+- **Bark AI Singing**: Expressive singing vocals using Suno's Bark TTS model
 - **Karaoke Timing**: Word-by-word synchronization for sing-along
 - **Auto Beat Matching**: BPM detection and instrumental selection
 - **MongoDB Caching**: Instant responses for popular words
@@ -18,7 +18,7 @@ FastAPI Backend (Python 3.10+)
 ├── MongoDB (Beanie ODM) - Database & caching
 ├── Redis + Celery - Async task queue
 ├── Gemini API - Lyrics generation
-├── Edge TTS - Vocal synthesis (FREE!)
+├── Bark TTS - Expressive singing synthesis (GPU-accelerated)
 ├── Librosa - Audio analysis & BPM detection
 ├── Pydub - Audio mixing
 └── Aeneas - Karaoke word timing
@@ -39,7 +39,7 @@ EmoryHack/
 │       ├── __init__.py
 │       ├── rhyme_service.py      # Rhyme word generation
 │       ├── lyrics_service.py     # Gemini AI pirate lyrics
-│       ├── vocal_service.py      # Edge TTS synthesis
+│       ├── vocal_service.py      # Bark TTS singing synthesis
 │       ├── beat_manager.py       # Beat library management
 │       ├── audio_service.py      # Audio mixing & BPM
 │       └── karaoke_service.py    # Aeneas word timing
@@ -63,6 +63,7 @@ EmoryHack/
 - MongoDB 6.0+
 - Redis 6.0+
 - FFmpeg
+- CUDA-capable GPU (recommended for Bark TTS)
 
 ### 2. One-Command Setup
 
@@ -189,20 +190,22 @@ GET /health
 | Database | MongoDB + Beanie | NoSQL, flexible schema, async |
 | Task Queue | Celery + Redis | Background processing |
 | LLM | Gemini API | Free, powerful, pirate-themed prompts |
-| TTS | Edge TTS | 100% free, no GPU needed! |
+| TTS | Bark (Suno) | Expressive singing, musical vocalizations! |
 | Audio Processing | Librosa, Pydub | Industry standard |
 | Karaoke Timing | Aeneas | Forced alignment |
 
-## 💰 Cost Breakdown (All Free!)
+## 💰 Cost Breakdown
 
 | Service | Free Tier | Cost |
 |---------|-----------|------|
 | Gemini API | 60 req/min | $0 |
-| Edge TTS | Unlimited | $0 |
+| Bark TTS | Open-source (local) | $0 |
 | MongoDB Atlas | 512MB M0 | $0 |
 | Redis Cloud | 30MB | $0 |
-| Hosting (Railway/Render) | 512MB RAM | $0 |
-| **TOTAL** | ~1000 songs/month | **$0** |
+| GPU Hosting | Varies by provider | Variable (GPU required) |
+| **TOTAL** | ~1000 songs/month | **Free + GPU costs** |
+
+**Note:** Bark runs locally and is free but requires GPU for optimal performance.
 
 ## 🎓 Educational Value
 
@@ -242,10 +245,11 @@ This project is created for EmoryHack hackathon.
 ## 🙏 Acknowledgments
 
 - **Gemini API** by Google - Free LLM
-- **Edge TTS** by Microsoft - Free TTS
+- **Bark** by Suno - Open-source expressive TTS
 - **Looperman.com** - Free beats
 - **Aeneas** - Forced alignment
 - **FastAPI** - Modern web framework
+- **HuggingFace Transformers** - Model hosting and inference
 
 ## 🏴‍☠️ Arr! Let's Make Some Shanties!
 

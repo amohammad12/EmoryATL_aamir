@@ -26,10 +26,15 @@ class Settings(BaseSettings):
     PIRATE_SHANTY_BPM_MIN: int = 90
     PIRATE_SHANTY_BPM_MAX: int = 110
 
-    # Edge TTS Settings
-    TTS_VOICE: str = "en-US-JennyNeural"
-    TTS_RATE: str = "-10%"
-    TTS_PITCH: str = "+5Hz"
+    # Bark TTS Settings
+    BARK_MODEL: str = "suno/bark"
+    BARK_VOICE_PRESET: str = "v2/en_speaker_6"  # Kid-friendly female voice
+    BARK_TEMPERATURE: float = 0.7  # Controls randomness/expressiveness (0.0-1.0)
+    BARK_USE_GPU: bool = True  # Enable GPU acceleration
+    BARK_SINGING_MODE: bool = True  # Enable musical/singing vocalizations
+    BARK_SEMANTIC_TEMP: float = 0.8  # Semantic generation temperature
+    BARK_COARSE_TEMP: float = 0.7  # Coarse generation temperature
+    BARK_FINE_TEMP: float = 0.5  # Fine generation temperature
 
     # Directories
     BEATS_DIR: Path = Path("beats")

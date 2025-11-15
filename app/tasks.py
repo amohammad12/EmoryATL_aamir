@@ -70,7 +70,7 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
         # Update progress: 40%
         self.update_state(state='PROGRESS', meta={'progress': 40, 'status': 'Recording vocals...'})
 
-        # Step 3: Generate vocals with Edge TTS
+        # Step 3: Generate singing vocals with Bark TTS
         vocal_gen = VocalGenerator()
         vocal_path = vocal_gen.generate_vocals(lyrics_data['lyrics'])
 
@@ -153,8 +153,8 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
         return result
 
     except Exception as e:
-        logger.error(f"Song generation failed for '{word}': {e}")
-        self.update_state(state='FAILURE', meta={'error': str(e)})
+        logger.error(f"Song generation failed for '{word}': {e}", exc_info=True)
+        # Let Celery handle the FAILURE state automatically
         raise
 
 
