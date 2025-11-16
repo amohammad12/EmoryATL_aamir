@@ -24,7 +24,7 @@ class LyricsGenerator:
         rhymes: List[str]
     ) -> Dict[str, any]:
         """
-        Generate pirate-themed sea shanty lyrics for preschool kids
+        Generate simple, cute educational song lyrics for preschool kids
 
         Args:
             word: Main theme word
@@ -34,49 +34,50 @@ class LyricsGenerator:
             Dictionary with lyrics, structure, word_count, estimated_duration
         """
         try:
-            logger.info(f"Generating pirate shanty for word '{word}' with rhymes: {rhymes}")
+            logger.info(f"Generating kids song for word '{word}' with rhymes: {rhymes}")
 
             prompt = f"""
-You are a songwriter for kids.
-You specialize in pirate-themed sea shanties.
-A song should include pirate-themed objects and ideas.
-Incorporate additional information in the song to teach kids about the topic.
+You are a gentle, caring preschool teacher creating SOFT, EDUCATIONAL songs for 3-5 year olds.
 
-Make it very short, simple in vocabulary, and incorporate rhyming.
-Add pirate vocalizations in parentheses.
-For example: (arr!), (yo-ho!), (ahoy!), and (avast!)
+TOPIC: {word}
 
-Remember: this is for kids. No mature themes, alcohol references, violence.
+CRITICAL RULES - READ CAREFULLY:
+1. ✅ GENTLE & SMOOTH - Use soft, flowing words that sound sweet when sung
+2. ✅ EDUCATIONAL - Teach kids what "{word}" is in a loving, nurturing way
+3. ✅ SIMPLE STORY - Tell one clear idea that makes sense to little children
+4. ✅ NATURAL LANGUAGE - Write like you're talking to a young child, not performing
+5. ✅ CALM TONE - Soothing and peaceful, like a lullaby or gentle nursery rhyme
 
-REQUIREMENTS:
-- Main theme word: "{word}"
-- Use ONLY these rhyming words: {', '.join(rhymes)}
-- Keep it to about 30 seconds when sung
-- Simple vocabulary (ages 3-5)
-- Include pirate vocalizations in parentheses like (arr!), (yo-ho!)
-- Teach something educational about the word
+ABSOLUTELY FORBIDDEN WORDS (NEVER USE THESE):
+❌ arr, ahoy, yo-ho, avast, matey, shiver, timbers
+❌ ANY pirate-related words or sounds
+❌ ANY harsh or loud exclamations
+❌ ship, sail, sea, ocean, boat, treasure, captain, crew
 
-Output only a song in this format:
-Verse 1:
-[2 lines]
+SONG STRUCTURE:
+✅ Write exactly 4-6 gentle lines
+✅ Each line teaches something sweet about "{word}"
+✅ Use words a 3-year-old knows: happy, soft, pretty, nice, love, play, fun
+✅ Make it peaceful and comforting
+✅ Optional: You may use these words if they fit gently: {', '.join(rhymes[:2])}
 
-Chorus:
-[2 lines with pirate vocalization]
+TONE EXAMPLES:
+✅ GOOD (gentle): "The butterfly is soft and light, it dances in the air"
+❌ BAD (harsh): "The butterfly goes whoosh and zoom, it's wild everywhere"
 
-Verse 2:
-[2 lines]
-
-Chorus:
-[2 lines with pirate vocalization]
-
-Generate the pirate sea shanty now:
+WRITE A GENTLE SONG ABOUT "{word}":
             """
 
             # Generate lyrics with Gemini
             response = self.model.generate_content(prompt)
             lyrics = response.text.strip()
 
-            logger.info(f"Generated lyrics:\n{lyrics}")
+            logger.info(f"Generated lyrics (raw):\n{lyrics}")
+
+            # CRITICAL: Remove any pirate words that slipped through
+            lyrics = self._remove_pirate_words(lyrics)
+
+            logger.info(f"Generated lyrics (cleaned):\n{lyrics}")
 
             # Parse and validate
             word_count = len(lyrics.split())
@@ -94,6 +95,53 @@ Generate the pirate sea shanty now:
             logger.error(f"Error generating lyrics: {e}")
             raise
 
+    def _remove_pirate_words(self, lyrics: str) -> str:
+        """
+        Remove pirate exclamations and harsh sounds from lyrics
+
+        This is a safety net - the Gemini prompt should prevent these,
+        but we remove them here just in case they slip through.
+
+        Args:
+            lyrics: The raw lyrics
+
+        Returns:
+            Cleaned lyrics without pirate exclamations
+        """
+        import re
+
+        # ONLY remove pirate-specific exclamations and sounds
+        # We don't remove nautical words here because they might be legitimate topics
+        pirate_exclamations = [
+            # Pirate exclamations and sounds
+            r'\barr+!?\b', r'\bahoy!?\b', r'\byo-ho+!?\b', r'\bavast!?\b',
+            r'\bmatey!?\b', r'\bshiver\s+me\s+timbers!?\b', r'\bblimey!?\b',
+
+            # In parentheses
+            r'\(arr+!?\)', r'\(ahoy!?\)', r'\(yo-ho+!?\)', r'\(avast!?\)',
+            r'\(matey!?\)', r'\(blimey!?\)',
+
+            # Standalone anywhere in line
+            r'arr+!?', r'ahoy!?', r'yo-ho+!?', r'avast!?',
+
+            # Common pirate phrases
+            r'\bshiver\s+me\s+timbers', r'\bwalk\s+the\s+plank',
+            r'\bpirate\s+treasure', r'\bpirate\s+ship',
+        ]
+
+        cleaned = lyrics
+        for pattern in pirate_exclamations:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+
+        # Remove extra whitespace and empty lines that result from removals
+        cleaned = re.sub(r'\n\s*\n+', '\n', cleaned)  # Multiple blank lines to one
+        cleaned = re.sub(r' +', ' ', cleaned)  # Multiple spaces to one
+        cleaned = re.sub(r' \n', '\n', cleaned)  # Space before newline
+        cleaned = re.sub(r'\n ', '\n', cleaned)  # Space after newline
+        cleaned = cleaned.strip()
+
+        return cleaned
+
     def _estimate_duration(self, lyrics: str) -> float:
         """
         Estimate song duration based on word count
@@ -110,7 +158,7 @@ Generate the pirate sea shanty now:
         words_per_second = 1.0  # 60 words per minute
         duration = word_count / words_per_second
 
-        # Add buffer for musical pauses and pirate vocalizations
+        # Add buffer for musical pauses
         duration *= 1.2
 
         logger.info(f"Estimated duration: {duration:.1f}s for {word_count} words")

@@ -27,16 +27,20 @@ class Settings(BaseSettings):
     PIRATE_SHANTY_BPM_MIN: int = 90
     PIRATE_SHANTY_BPM_MAX: int = 110
 
+    # Background Music Settings
+    USE_CUSTOM_BACKGROUND_MUSIC: bool = True  # Use custom tracks instead of generated beats
+    BACKGROUND_MUSIC_FADE_OUT: float = 1.0  # Fade out duration in seconds
+
     # TTS Provider Selection
     TTS_PROVIDER: str = "elevenlabs"  # Options: "elevenlabs" or "bark"
     TTS_FALLBACK_TO_BARK: bool = True  # Use Bark if ElevenLabs fails
 
     # ElevenLabs TTS Settings (Primary - Professional Quality)
     ELEVENLABS_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"  # Bella - young, warm teacher voice
-    ELEVENLABS_MODEL: str = "eleven_multilingual_v2"
-    ELEVENLABS_STABILITY: float = 0.5  # 0-1 (higher = more consistent)
-    ELEVENLABS_SIMILARITY: float = 0.75  # 0-1 (higher = closer to original voice)
-    ELEVENLABS_STYLE: float = 0.0  # 0-1 (exaggeration of style)
+    ELEVENLABS_MODEL: str = "eleven_turbo_v2_5"  # Latest model with better singing
+    ELEVENLABS_STABILITY: float = 0.3  # Lower for more expressive singing (0-1)
+    ELEVENLABS_SIMILARITY: float = 0.6  # Lower for more variation (0-1)
+    ELEVENLABS_STYLE: float = 0.8  # Higher for more singing style (0-1)
     ELEVENLABS_BOOST: bool = True  # Speaker boost for clarity
 
     # Bark TTS Settings (Fallback - Expressive Quality)
@@ -53,6 +57,7 @@ class Settings(BaseSettings):
     BEATS_DIR: Path = Path("beats")
     OUTPUT_DIR: Path = Path("outputs")
     TEMP_DIR: Path = Path("temp")
+    BACKGROUND_MUSIC_DIR: Path = Path("background_music")
 
     # Application
     MAX_CONCURRENT_JOBS: int = 3
@@ -69,6 +74,7 @@ class Settings(BaseSettings):
         self.BEATS_DIR.mkdir(exist_ok=True)
         self.OUTPUT_DIR.mkdir(exist_ok=True)
         self.TEMP_DIR.mkdir(exist_ok=True)
+        self.BACKGROUND_MUSIC_DIR.mkdir(exist_ok=True)
 
 
 # Global settings instance

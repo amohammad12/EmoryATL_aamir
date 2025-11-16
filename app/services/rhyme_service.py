@@ -19,10 +19,12 @@ PRESCHOOL_VOCAB = {
     "ride", "saw", "say", "she", "so", "soon", "that", "there", "they", "this",
     "too", "under", "want", "was", "well", "went", "what", "white", "who",
     "will", "with", "yes",
-    # Additional kid-friendly words
-    "cat", "dog", "sun", "moon", "star", "tree", "bird", "fish", "boat", "car",
-    "hat", "ball", "book", "cup", "pig", "box", "fox", "bee", "sea", "day",
-    "night", "light", "right", "fight", "bright", "ship", "sail", "whale", "tail"
+    # Additional kid-friendly words (NO PIRATE THEMES)
+    "cat", "dog", "sun", "moon", "star", "tree", "bird", "fish", "car",
+    "hat", "ball", "book", "cup", "pig", "box", "fox", "bee", "day",
+    "night", "light", "right", "bright", "sky", "fly", "try", "cry",
+    "smile", "mile", "while", "file", "cake", "lake", "make", "take",
+    "snow", "grow", "show", "glow", "feet", "meet", "sweet", "treat"
 }
 
 
@@ -37,6 +39,14 @@ def get_kid_friendly_rhymes(word: str, count: int = 6) -> List[str]:
     Returns:
         List of kid-friendly rhyming words
     """
+    # Words to exclude (pirate-related and inappropriate themes)
+    EXCLUDED_WORDS = {
+        "ship", "sail", "whale", "tail", "sea", "pirate", "arr", "ahoy",
+        "treasure", "crew", "captain", "boat", "ocean", "wave", "shore",
+        "anchor", "mast", "deck", "port", "voyage", "island", "parrot",
+        "cannon", "sword", "gold", "chest", "map", "flag", "plank"
+    }
+
     try:
         # Get all rhymes from pronouncing library
         all_rhymes = pronouncing.rhymes(word.lower())
@@ -48,6 +58,10 @@ def get_kid_friendly_rhymes(word: str, count: int = 6) -> List[str]:
         # Filter for kid-friendly words
         kid_friendly = []
         for rhyme in all_rhymes:
+            # Skip excluded words
+            if rhyme.lower() in EXCLUDED_WORDS:
+                continue
+
             # Check if in preschool vocabulary (high priority)
             if rhyme.lower() in PRESCHOOL_VOCAB:
                 kid_friendly.append(rhyme)

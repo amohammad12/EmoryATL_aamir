@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Try to import ElevenLabs
 try:
-    from elevenlabs import ElevenLabs
+    from elevenlabs.client import ElevenLabs
     ELEVENLABS_AVAILABLE = True
 except ImportError:
     ELEVENLABS_AVAILABLE = False
@@ -322,44 +322,75 @@ class VocalGenerator:
         cleaned = re.sub(r'Bridge:\s*', '', cleaned)
         cleaned = re.sub(r'Outro:\s*', '', cleaned)
 
-        # Remove parentheses from pirate vocalizations
-        pirate_words = ['arr', 'Arr', 'yo-ho', 'Yo-ho', 'ahoy', 'Ahoy',
-                       'avast', 'Avast', 'heave', 'Heave', 'shiver']
+        # Remove ANY pirate vocalizations completely (including parentheses)
+        pirate_vocalizations = [
+            r'\(arr!?\)',
+            r'\(Arr!?\)',
+            r'\(yo-ho!?\)',
+            r'\(Yo-ho!?\)',
+            r'\(ahoy!?\)',
+            r'\(Ahoy!?\)',
+            r'\(avast!?\)',
+            r'\(Avast!?\)',
+            r'\(heave!?\)',
+            r'\(Heave!?\)',
+            r'\(shiver!?\)',
+            r'\(matey!?\)',
+            r'\(aye!?\)',
+            # Without parentheses too
+            r'\barr!?\b',
+            r'\bArr!?\b',
+            r'\byo-ho!?\b',
+            r'\bahoy!?\b',
+            r'\bavast!?\b',
+        ]
 
-        for word in pirate_words:
-            cleaned = cleaned.replace(f'({word}!)', f'{word}!')
-            cleaned = cleaned.replace(f'({word.capitalize()}!)', f'{word.capitalize()}!')
+        for pattern in pirate_vocalizations:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
 
-        # Clean up excessive blank lines
+        # Clean up excessive blank lines and spaces
         cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
+        cleaned = re.sub(r'\s+', ' ', cleaned)  # Multiple spaces to single
+        cleaned = re.sub(r'\s+\n', '\n', cleaned)  # Trailing spaces
 
         return cleaned.strip()
 
     def _format_for_elevenlabs(self, lyrics: str) -> str:
-        """Format lyrics for ElevenLabs with musical/rhythmic cues"""
+        """Format lyrics for ElevenLabs with singing cues"""
         import re
 
-        # Add pauses at line breaks for rhythm
-        formatted = re.sub(r'\n', ',\n', lyrics)
+        # Remove any structure labels that might remain
+        lyrics = re.sub(r'(Verse \d+:|Chorus:|Bridge:|Outro:)\s*', '', lyrics)
 
-        # Add emphasis to rhyming words at end of lines (simple heuristic)
-        # This helps ElevenLabs emphasize the rhymes
-        lines = formatted.split('\n')
+        # Split into lines
+        lines = [line.strip() for line in lyrics.split('\n') if line.strip()]
+
+        # Format each line for singing rhythm
         enhanced_lines = []
+        for i, line in enumerate(lines):
+            # Add musical pauses between lines
+            if i > 0:
+                enhanced_lines.append('')  # Blank line for pause
 
-        for line in lines:
-            line = line.strip()
-            if line:
-                # Add slight pause at end of each line for rhythm
-                if not line.endswith('!') and not line.endswith('?'):
-                    line = line.rstrip(',') + '.'
-                enhanced_lines.append(line)
+            # Clean up punctuation for better singing flow
+            line = line.rstrip('.,;:')
 
-        return '\n'.join(enhanced_lines)
+            # Add exclamation for more energy on key lines
+            if i % 2 == 1:  # Every other line (rhyming lines)
+                line = line + '!'
+            else:
+                line = line + '.'
+
+            enhanced_lines.append(line)
+
+        formatted_text = '\n'.join(enhanced_lines)
+
+        # Add gentle singing cues for smooth, soft delivery
+        return f"[singing gently and sweetly like a lullaby]\n\n{formatted_text}"
 
     def _format_for_bark(self, lyrics: str) -> str:
-        """Format lyrics for Bark with simple teacher prompt"""
-        return f"[Teacher reading a fun pirate story to children]\n{lyrics}"
+        """Format lyrics for Bark with gentle teacher prompt"""
+        return f"[Gentle teacher singing a sweet song to children]\n{lyrics}"
 
     def _split_into_chunks(self, text: str, max_length: int = 200) -> list:
         """Split text into smaller chunks for Bark"""

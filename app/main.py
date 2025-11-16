@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 
 from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection
-from app.models import Job, SongCache
+from app.models import Job, SongCache, UserLibrary, User
 from app.tasks import generate_song_task
 from app.services.rhyme_service import validate_word
 
@@ -338,6 +338,299 @@ async def delete_cached_song(word: str):
 
 # Import datetime for job updates
 from datetime import datetime
+
+
+# Authentication Endpoints
+@app.post("/api/auth/signup")
+async def signup(request: dict):
+    """
+    Create a new user account
+
+    Args:
+        request: Dictionary with username, email, password
+
+    Returns:
+        User data and session info
+    """
+    try:
+        username = request.get('username', '').strip()
+        email = request.get('email', '').strip()
+        password = request.get('password', '')
+
+        # Validate inputs
+        if not username or not email or not password:
+            raise HTTPException(
+                status_code=400,
+                detail="Username, email, and password are required"
+            )
+
+        if len(password) < 6:
+            raise HTTPException(
+                status_code=400,
+                detail="Password must be at least 6 characters"
+            )
+
+        # Check if username already exists
+        existing_user = await User.find_one(User.username == username)
+        if existing_user:
+            raise HTTPException(
+                status_code=400,
+                detail="Username already taken"
+            )
+
+        # Check if email already exists
+        existing_email = await User.find_one(User.email == email)
+        if existing_email:
+            raise HTTPException(
+                status_code=400,
+                detail="Email already registered"
+            )
+
+        # Create new user
+        password_hash = User.hash_password(password)
+        new_user = User(
+            username=username,
+            email=email,
+            password_hash=password_hash
+        )
+        await new_user.insert()
+
+        logger.info(f"New user created: {username}")
+
+        return {
+            "message": "Account created successfully",
+            "user": {
+                "username": username,
+                "email": email
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during signup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/login")
+async def login(request: dict):
+    """
+    Login user
+
+    Args:
+        request: Dictionary with username and password
+
+    Returns:
+        User data and session info
+    """
+    try:
+        username = request.get('username', '').strip()
+        password = request.get('password', '')
+
+        if not username or not password:
+            raise HTTPException(
+                status_code=400,
+                detail="Username and password are required"
+            )
+
+        # Find user
+        user = await User.find_one(User.username == username)
+
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid username or password"
+            )
+
+        # Verify password
+        if not user.verify_password(password):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid username or password"
+            )
+
+        # Update last login
+        user.last_login = datetime.utcnow()
+        await user.save()
+
+        logger.info(f"User logged in: {username}")
+
+        return {
+            "message": "Login successful",
+            "user": {
+                "username": user.username,
+                "email": user.email
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during login: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Library Management Endpoints
+@app.post("/api/library/songs")
+async def save_song_to_library(request: dict):
+    """
+    Save a song to the user's library
+
+    Args:
+        request: Dictionary with song data and user_id
+
+    Returns:
+        Success message
+    """
+    try:
+        # Extract user_id and song data from request
+        user_id = request.get('userId', request.get('user_id', ''))
+        title = request.get('title', '')
+        lyrics = request.get('lyrics', '')
+        audio_url = request.get('audioUrl', '')
+        timings = request.get('timings', [])
+        duration = request.get('duration')
+        bpm = request.get('bpm')
+
+        # Validate required fields
+        if not user_id:
+            raise HTTPException(
+                status_code=400,
+                detail="User ID is required. Please login first."
+            )
+
+        if not title or not lyrics or not audio_url:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required fields: title, lyrics, or audioUrl"
+            )
+
+        # Verify user exists
+        user = await User.find_one(User.username == user_id)
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found. Please login again."
+            )
+
+        # Check if song already exists in user's library
+        existing = await UserLibrary.find_one(
+            UserLibrary.user_id == user_id,
+            UserLibrary.title == title
+        )
+
+        if existing:
+            logger.info(f"Song '{title}' already exists in {user_id}'s library")
+            return {"message": "Song already in library", "id": str(existing.id)}
+
+        # Create library entry
+        library_song = UserLibrary(
+            user_id=user_id,
+            title=title,
+            lyrics=lyrics,
+            audio_url=audio_url,
+            timings=timings if timings else [],
+            duration=duration,
+            bpm=bpm
+        )
+
+        await library_song.insert()
+
+        logger.info(f"Saved song '{title}' to {user_id}'s library")
+
+        return {
+            "message": f"Song '{title}' added to library",
+            "id": str(library_song.id)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving song to library: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/library/songs")
+async def get_user_library(user_id: str):
+    """
+    Get all songs from user's library
+
+    Args:
+        user_id: User identifier (username)
+
+    Returns:
+        List of songs in library
+    """
+    try:
+        if not user_id:
+            raise HTTPException(
+                status_code=400,
+                detail="User ID is required"
+            )
+
+        # Verify user exists
+        user = await User.find_one(User.username == user_id)
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        songs = await UserLibrary.find(UserLibrary.user_id == user_id).to_list()
+
+        return {
+            "songs": [
+                {
+                    "id": str(song.id),
+                    "title": song.title,
+                    "lyrics": song.lyrics,
+                    "audioUrl": song.audio_url,
+                    "timings": song.timings,
+                    "duration": song.duration,
+                    "bpm": song.bpm,
+                    "addedAt": song.added_at.isoformat()
+                }
+                for song in songs
+            ]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user library: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/library/songs/{song_id}")
+async def delete_from_library(song_id: str):
+    """
+    Delete a song from user's library
+
+    Args:
+        song_id: Song ID to delete
+
+    Returns:
+        Success message
+    """
+    try:
+        from bson import ObjectId
+
+        song = await UserLibrary.find_one(UserLibrary.id == ObjectId(song_id))
+
+        if not song:
+            raise HTTPException(status_code=404, detail="Song not found in library")
+
+        await song.delete()
+
+        logger.info(f"Deleted song {song_id} from library")
+
+        return {"message": "Song deleted from library"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting song from library: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

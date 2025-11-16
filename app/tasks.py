@@ -14,6 +14,7 @@ from app.services import (
     PirateBeatGenerator,
     MoodAnalyzer
 )
+from app.services.background_music_service import BackgroundMusicManager
 
 logger = logging.getLogger(__name__)
 
@@ -90,27 +91,57 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
         logger.info(f"Mood: {mood_analysis['mood'].value}, Energy: {energy:.2f}, BPM: {vocal_bpm:.1f}")
 
         # Update progress: 60%
-        self.update_state(state='PROGRESS', meta={'progress': 60, 'status': 'Generating themed instrumental...'})
+        self.update_state(state='PROGRESS', meta={'progress': 60, 'status': 'Selecting background music...'})
 
-        # Step 5: Generate themed instrumental
-        # First check if we have a pre-made beat in library
-        instrumental_path = audio_service.get_instrumental(vocal_path, genre="pirate-shanty")
+        # Step 5: Get background music (custom tracks or generated beats)
+        if settings.USE_CUSTOM_BACKGROUND_MUSIC:
+            # Use custom background music tracks
+            logger.info(f"Using custom background music for '{word}'...")
 
-        if not instrumental_path:
-            # No pre-made beat found, generate one dynamically!
-            logger.info(f"No pre-made beat found, generating themed instrumental for '{word}'...")
+            music_manager = BackgroundMusicManager()
 
-            beat_gen = PirateBeatGenerator()
-            instrumental_path = beat_gen.generate_beat(
-                word=word,
-                duration=lyrics_data['estimated_duration'] + 2,  # Add 2s buffer
-                bpm=vocal_bpm,
-                energy=energy
+            # Get actual vocal duration
+            actual_duration = audio_service.get_audio_duration(vocal_path)
+
+            # Get random background track trimmed to vocal length
+            background_audio = music_manager.get_random_background(
+                target_duration=actual_duration,
+                fade_out_duration=settings.BACKGROUND_MUSIC_FADE_OUT
             )
 
-            logger.info(f"Generated themed instrumental: {instrumental_path}")
+            if background_audio:
+                # Save background to temp file
+                import uuid
+                background_filename = f"background_{uuid.uuid4()}.mp3"
+                instrumental_path = str(settings.TEMP_DIR / background_filename)
+                background_audio.export(instrumental_path, format="mp3", bitrate="192k")
+                logger.info(f"Custom background music saved: {instrumental_path}")
+            else:
+                # Fallback to generated beat if no custom tracks
+                logger.warning("No custom background tracks found, falling back to beat generation")
+                beat_gen = PirateBeatGenerator()
+                instrumental_path = beat_gen.generate_beat(
+                    word=word,
+                    duration=lyrics_data['estimated_duration'] + 2,
+                    bpm=vocal_bpm,
+                    energy=energy
+                )
         else:
-            logger.info(f"Using pre-made instrumental: {instrumental_path}")
+            # Use generated beats (original behavior)
+            instrumental_path = audio_service.get_instrumental(vocal_path, genre="pirate-shanty")
+
+            if not instrumental_path:
+                logger.info(f"Generating themed instrumental for '{word}'...")
+                beat_gen = PirateBeatGenerator()
+                instrumental_path = beat_gen.generate_beat(
+                    word=word,
+                    duration=lyrics_data['estimated_duration'] + 2,
+                    bpm=vocal_bpm,
+                    energy=energy
+                )
+                logger.info(f"Generated themed instrumental: {instrumental_path}")
+            else:
+                logger.info(f"Using pre-made instrumental: {instrumental_path}")
 
         # Update progress: 75%
         self.update_state(state='PROGRESS', meta={'progress': 75, 'status': 'Mixing vocals with instrumental...'})
@@ -139,10 +170,19 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
         # Update progress: 100%
         self.update_state(state='PROGRESS', meta={'progress': 100, 'status': 'Complete!'})
 
+        # Clean lyrics for display (remove structure labels)
+        import re
+        cleaned_lyrics = lyrics_data['lyrics']
+        cleaned_lyrics = re.sub(r'Verse \d+:\s*', '', cleaned_lyrics)
+        cleaned_lyrics = re.sub(r'Chorus:\s*', '', cleaned_lyrics)
+        cleaned_lyrics = re.sub(r'Bridge:\s*', '', cleaned_lyrics)
+        cleaned_lyrics = re.sub(r'Outro:\s*', '', cleaned_lyrics)
+        cleaned_lyrics = cleaned_lyrics.strip()
+
         # Build result
         result = {
             "word": word,
-            "lyrics": lyrics_data['lyrics'],
+            "lyrics": cleaned_lyrics,
             "audio_url": f"/outputs/{final_audio_path.split('/')[-1]}",
             "audio_path": final_audio_path,
             "timings": timings,

@@ -26,12 +26,12 @@ async def connect_to_mongo():
         database = mongodb_client[settings.MONGODB_DB_NAME]
 
         # Import models
-        from app.models import Job, SongCache
+        from app.models import Job, SongCache, UserLibrary, User
 
         # Initialize Beanie with models
         await init_beanie(
             database=database,
-            document_models=[Job, SongCache]
+            document_models=[Job, SongCache, UserLibrary, User]
         )
 
         logger.info(f"Successfully connected to MongoDB database: {settings.MONGODB_DB_NAME}")
