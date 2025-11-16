@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+body { 
+  @apply font-display;
+  background: linear-gradient(180deg, #87CEEB 0%, #B0E2FF 50%, #E0F4FF 100%);
+  min-height: 100vh;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shared utilities */
+.card { @apply bg-white rounded-2xl shadow-soft; }
+.pill { @apply rounded-full px-4 py-1 text-sm font-medium; }
+.tap { @apply active:scale-[0.98] transition-transform; }
+.focus-ring { @apply focus:outline-none focus-visible:ring-4 focus-visible:ring-purple/40; }
+
+/* Gradient text with stroke */
+.gradient-title {
+  background: linear-gradient(180deg, #FF9ECF 0%, #FFD4E8 50%, #FFFFFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  position: relative;
+  display: inline-block;
+}
+.gradient-title::before {
+  content: attr(data-text);
+  position: absolute;
+  -webkit-text-stroke: 4px white;
+  -webkit-text-fill-color: transparent;
+  left: 0;
+  z-index: -1;
+}
+
+/* Cloud decoration */
+.cloud {
+  background: white;
+  border-radius: 100px;
+  position: absolute;
+  opacity: 0.9;
+}
+.cloud::before,
+.cloud::after {
+  content: '';
+  background: white;
+  border-radius: 100px;
+  position: absolute;
+}
+
+/* Green hill decoration */
+.hill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: linear-gradient(180deg, #B4F461 0%, #A0E050 100%);
+  border-radius: 50% 50% 0 0;
+  z-index: 0;
+}
+
+/* Sparkle animation */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.sparkle {
+  position: absolute;
+  color: white;
+  animation: twinkle 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Floating animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes slide-down {
+  0% { 
+    transform: translate(-50%, -100%);
+    opacity: 0;
+  }
+  100% { 
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease-out;
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Card pattern backgrounds */
+.pattern-dots {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.2) 2px, transparent 2px);
+  background-size: 20px 20px;
+}
+
+.pattern-stars {
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 1px, transparent 1px),
+    radial-gradient(circle at 60% 70%, rgba(255,255,255,0.3) 1px, transparent 1px),
+    radial-gradient(circle at 80% 20%, rgba(255,255,255,0.3) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.pattern-zigzag {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(255,255,255,0.1) 10px,
+    rgba(255,255,255,0.1) 11px
+  );
+}
