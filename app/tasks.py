@@ -136,6 +136,9 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
         duration = audio_service.get_audio_duration(final_audio_path)
         bpm = audio_service.detect_bpm(final_audio_path)
 
+        # Update progress: 100%
+        self.update_state(state='PROGRESS', meta={'progress': 100, 'status': 'Complete!'})
+
         # Build result
         result = {
             "word": word,
@@ -149,6 +152,7 @@ def generate_song_task(self, word: str) -> Dict[str, Any]:
         }
 
         logger.info(f"Song generation completed successfully for '{word}'")
+        logger.info(f"Result: {result['audio_url']}")
 
         return result
 

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Try to import ElevenLabs
 try:
-    from elevenlabs import generate, Voice, VoiceSettings, set_api_key
+    from elevenlabs import ElevenLabs
     ELEVENLABS_AVAILABLE = True
 except ImportError:
     ELEVENLABS_AVAILABLE = False
@@ -88,10 +88,11 @@ class VocalGenerator:
         self.fallback_enabled = settings.TTS_FALLBACK_TO_BARK
 
         # Initialize ElevenLabs if available and configured
+        self.elevenlabs_client = None
         self.elevenlabs_available = False
         if ELEVENLABS_AVAILABLE and settings.ELEVENLABS_API_KEY:
             try:
-                set_api_key(settings.ELEVENLABS_API_KEY)
+                self.elevenlabs_client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY)
                 self.elevenlabs_available = True
                 logger.info("ElevenLabs TTS initialized successfully")
             except Exception as e:
@@ -189,26 +190,27 @@ class VocalGenerator:
                 raise
 
     def _generate_with_elevenlabs(self, lyrics: str, output_path: str) -> str:
-        """Generate vocals using ElevenLabs API"""
+        """Generate vocals using ElevenLabs API (v2 SDK)"""
         try:
-            # Generate audio using the standalone generate function
-            audio_generator = generate(
-                text=lyrics,
-                voice=Voice(
-                    voice_id=settings.ELEVENLABS_VOICE_ID,
-                    settings=VoiceSettings(
-                        stability=settings.ELEVENLABS_STABILITY,
-                        similarity_boost=settings.ELEVENLABS_SIMILARITY,
-                        style=settings.ELEVENLABS_STYLE,
-                        use_speaker_boost=settings.ELEVENLABS_BOOST
-                    )
-                ),
-                model=settings.ELEVENLABS_MODEL
+            # Format lyrics for better rhythm and musicality
+            formatted_lyrics = self._format_for_elevenlabs(lyrics)
+
+            # Generate audio using v2 client API
+            response = self.elevenlabs_client.text_to_speech.convert(
+                text=formatted_lyrics,
+                voice_id=settings.ELEVENLABS_VOICE_ID,
+                model_id=settings.ELEVENLABS_MODEL,
+                voice_settings={
+                    "stability": settings.ELEVENLABS_STABILITY,
+                    "similarity_boost": settings.ELEVENLABS_SIMILARITY,
+                    "style": settings.ELEVENLABS_STYLE,
+                    "use_speaker_boost": settings.ELEVENLABS_BOOST
+                }
             )
 
-            # Collect audio bytes
+            # Collect audio bytes from generator
             audio_bytes = b''
-            for chunk in audio_generator:
+            for chunk in response:
                 audio_bytes += chunk
 
             # Convert to AudioSegment
@@ -332,6 +334,28 @@ class VocalGenerator:
         cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
 
         return cleaned.strip()
+
+    def _format_for_elevenlabs(self, lyrics: str) -> str:
+        """Format lyrics for ElevenLabs with musical/rhythmic cues"""
+        import re
+
+        # Add pauses at line breaks for rhythm
+        formatted = re.sub(r'\n', ',\n', lyrics)
+
+        # Add emphasis to rhyming words at end of lines (simple heuristic)
+        # This helps ElevenLabs emphasize the rhymes
+        lines = formatted.split('\n')
+        enhanced_lines = []
+
+        for line in lines:
+            line = line.strip()
+            if line:
+                # Add slight pause at end of each line for rhythm
+                if not line.endswith('!') and not line.endswith('?'):
+                    line = line.rstrip(',') + '.'
+                enhanced_lines.append(line)
+
+        return '\n'.join(enhanced_lines)
 
     def _format_for_bark(self, lyrics: str) -> str:
         """Format lyrics for Bark with simple teacher prompt"""

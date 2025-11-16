@@ -135,8 +135,28 @@ async def generate_song(request: GenerateRequest):
 
         if cached_song:
             logger.info(f"Found cached song for '{word}'")
+
+            # Create a job entry for the cached result with a unique ID
+            cached_job_id = f"cached-{word}-{uuid.uuid4().hex[:8]}"
+
+            cached_job = Job(
+                job_id=cached_job_id,
+                word=word,
+                status="completed",
+                progress=100,
+                result={
+                    "word": cached_song.word,
+                    "lyrics": cached_song.lyrics,
+                    "audio_url": cached_song.audio_url,
+                    "timings": cached_song.timings,
+                    "duration": cached_song.duration,
+                    "bpm": cached_song.bpm
+                }
+            )
+            await cached_job.insert()
+
             return JobResponse(
-                job_id="cached",
+                job_id=cached_job_id,
                 status="completed",
                 progress=100,
                 result={
@@ -189,11 +209,7 @@ async def get_job_status(job_id: str):
         JobResponse with current status and result if completed
     """
     try:
-        # Handle cached responses
-        if job_id == "cached":
-            raise HTTPException(status_code=400, detail="Cached response, no job to poll")
-
-        # Get job from MongoDB
+        # Get job from MongoDB (works for both cached and processing jobs)
         job = await Job.find_one(Job.job_id == job_id)
 
         if not job:

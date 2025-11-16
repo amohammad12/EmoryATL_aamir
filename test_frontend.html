@@ -227,7 +227,18 @@
                 const generateData = await generateResponse.json();
                 const jobId = generateData.job_id;
 
-                // Step 2: Poll for status
+                // Check if result is already complete (cached response)
+                if (generateData.status === 'completed' && generateData.result) {
+                    const progressBar = document.getElementById('progressBar');
+                    if (progressBar) {
+                        progressBar.style.width = '100%';
+                        progressBar.textContent = '100%';
+                    }
+                    showResult(generateData.result);
+                    return;
+                }
+
+                // Step 2: Poll for status (only if not already complete)
                 pollInterval = setInterval(async () => {
                     const statusResponse = await fetch(`http://localhost:8000/api/jobs/${jobId}`);
                     const statusData = await statusResponse.json();
